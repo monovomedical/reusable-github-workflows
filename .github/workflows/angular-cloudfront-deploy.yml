@@ -1,0 +1,99 @@
+name: Build and Deploy Angular App to Cloudfront
+
+on:
+  workflow_call:
+    inputs:
+      aws_region:
+        required: true
+        type: string
+      aws_page:
+        required: false
+        type: string
+      environment_name:
+        required: true
+        type: string
+      build_config_name:
+        required: true
+        type: string
+      s3_bucket:
+        required: true
+        type: string
+      stack_name:
+        required: true
+        type: string
+    secrets:
+      aws_access_key_id:
+        required: true
+      aws_secret_access_key:
+        required: true
+      distribution_id:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    container:
+      image: node:12.22-alpine3.12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Project
+        run: npm ci
+      - name: Save build timestamp to env variable
+        run: echo "TIME=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_ENV
+      - name: Save build timestamp to txt file
+        run: echo $TIME > build_timestamp.txt
+      - name: Upload build timestamp for deploy step
+        uses: actions/upload-artifact@v2
+        with:
+          name: build_timestamp
+          path: build_timestamp.txt
+          retention-days: 1
+      - name: Add branch name to environment file
+        run: sed -i "s/PLACE_BRANCH_NAME_HERE/$GITHUB_REF_NAME/g" ./src/environments/environment.${{inputs.environment_name}}.ts
+      - name: Add timestamp to environment file
+        run: sed -i "s/PLACE_TIMESTAMP_HERE/$TIME/g" ./src/environments/environment.${{inputs.environment_name}}.ts
+      - name: Build Project
+        run: node --max-old-space-size=2048 $(which npm) run build -- -c ${{inputs.build_config_name}}
+      - name: Compress mcp_dist
+        run: tar -cvzf mcp_dist.tar.gz dist/mcp
+      - name: Upload mcp_dist
+        uses: actions/upload-artifact@v2
+        with:
+          name: mcp_dist
+          path: mcp_dist.tar.gz
+          retention-days: 1
+  deploy:
+    needs: build
+    runs-on: ubuntu-20.04
+    container:
+      image: sleavely/node-awscli:12.x
+    steps:
+      - name: Download mcp_dist
+        uses: actions/download-artifact@v2
+        with:
+          name: mcp_dist
+      - name: Download build timestamp
+        uses: actions/download-artifact@v2
+        with:
+          name: build_timestamp
+      - name: Save build timestamp to env variable
+        run: echo "TIME=$(cat build_timestamp.txt)" >> $GITHUB_ENV
+      - name: Extract mcp_dist
+        run: tar -xvf mcp_dist.tar.gz
+      - name: Set Up Origin Path
+        run: |
+          echo "ORIGIN_PATH=/${{imputs.stack_name}}/${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          echo "APP_VERSION=${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
+      - name: Push to S3
+        run: aws s3 cp dist/mcp s3://${{inputs.s3_bucket}}$ORIGIN_PATH --recursive
+      - name: Update cloudfront
+        run: |
+          aws cloudfront get-distribution-config --id ${{inputs.distribution_id}} --output json > cloudfront_dist.json
+          export ETAG=$(jq '.ETag' cloudfront_dist.json | tr -d '"')
+          jq '.DistributionConfig' cloudfront_dist.json |
+            jq '.Origins.Items[0].OriginPath = $ENV.ORIGIN_PATH' > modified_distribution_config.json
+          aws cloudfront update-distribution --id ${{inputs.distribution_id}} --if-match $ETAG --distribution-config file://modified_distribution_config.json
+          aws cloudfront create-invalidation --distribution-id ${{inputs.distribution_id}} --paths "/*"
+      - name: Build number deployed
+        run: echo "${APP_VERSION} was deployed"
