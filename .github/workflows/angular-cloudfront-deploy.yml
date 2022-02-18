@@ -60,8 +60,8 @@ jobs:
       - name: Upload dist
         uses: actions/upload-artifact@v2
         with:
-          name: dist
-          path: dist.tar.gz
+          name: ${{inputs.stack_name}}_dist
+          path: ${{inputs.stack_name}}_dist.tar.gz
           retention-days: 1
   deploy:
     needs: build
@@ -72,7 +72,7 @@ jobs:
       - name: Download dist
         uses: actions/download-artifact@v2
         with:
-          name: dist
+          name: ${{inputs.stack_name}}_dist
       - name: Download build timestamp
         uses: actions/download-artifact@v2
         with:
@@ -80,7 +80,7 @@ jobs:
       - name: Save build timestamp to env variable
         run: echo "TIME=$(cat build_timestamp.txt)" >> $GITHUB_ENV
       - name: Extract dist
-        run: tar -xvf dist.tar.gz
+        run: tar -xvf ${{inputs.stack_name}}_dist.tar.gz
       - name: Set Up Origin Path
         run: |
           echo "ORIGIN_PATH=/${{inputs.stack_name}}/${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
