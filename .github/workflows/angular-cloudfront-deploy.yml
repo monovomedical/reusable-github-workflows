@@ -101,5 +101,5 @@ jobs:
             jq '.Origins.Items[0].OriginPath = $ENV.ORIGIN_PATH' > modified_distribution_config.json
           aws cloudfront update-distribution --id ${{secrets.distribution_id}} --if-match $ETAG --distribution-config file://modified_distribution_config.json
           aws cloudfront create-invalidation --distribution-id ${{secrets.distribution_id}} --paths "/*"
-      - name: Build number deployed
+      - name: Print app version deployed
         run: echo "${APP_VERSION} was deployed"
