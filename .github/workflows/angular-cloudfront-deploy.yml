@@ -86,7 +86,7 @@ jobs:
           echo "ORIGIN_PATH=/${{inputs.stack_name}}/${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
           echo "APP_VERSION=${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
       - name: Push to S3
-        run: aws s3 cp dist/${{inputs.stack_name}} s3://${{inputs.s3_bucket}}$ORIGIN_PATH --recursive
+        run: aws s3 cp dist/${{inputs.stack_name}} s3://${{inputs.s3_bucket}}${{env.ORIGIN_PATH}} --recursive
       - name: Update cloudfront
         run: |
           aws cloudfront get-distribution-config --id ${{inputs.distribution_id}} --output json > cloudfront_dist.json
