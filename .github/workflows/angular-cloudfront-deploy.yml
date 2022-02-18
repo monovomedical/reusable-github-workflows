@@ -55,13 +55,13 @@ jobs:
         run: sed -i "s/PLACE_TIMESTAMP_HERE/$TIME/g" ./src/environments/environment.${{inputs.environment_name}}.ts
       - name: Build Project
         run: node --max-old-space-size=2048 $(which npm) run build -- -c ${{inputs.build_config_name}}
-      - name: Compress mcp_dist
-        run: tar -cvzf mcp_dist.tar.gz dist/mcp
-      - name: Upload mcp_dist
+      - name: Compress dist
+        run: tar -cvzf ${{imputs.stack_name}}_dist.tar.gz dist/${{imputs.stack_name}}
+      - name: Upload dist
         uses: actions/upload-artifact@v2
         with:
-          name: mcp_dist
-          path: mcp_dist.tar.gz
+          name: dist
+          path: dist.tar.gz
           retention-days: 1
   deploy:
     needs: build
@@ -69,24 +69,24 @@ jobs:
     container:
       image: sleavely/node-awscli:12.x
     steps:
-      - name: Download mcp_dist
+      - name: Download dist
         uses: actions/download-artifact@v2
         with:
-          name: mcp_dist
+          name: dist
       - name: Download build timestamp
         uses: actions/download-artifact@v2
         with:
           name: build_timestamp
       - name: Save build timestamp to env variable
         run: echo "TIME=$(cat build_timestamp.txt)" >> $GITHUB_ENV
-      - name: Extract mcp_dist
-        run: tar -xvf mcp_dist.tar.gz
+      - name: Extract dist
+        run: tar -xvf dist.tar.gz
       - name: Set Up Origin Path
         run: |
           echo "ORIGIN_PATH=/${{imputs.stack_name}}/${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
           echo "APP_VERSION=${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
       - name: Push to S3
-        run: aws s3 cp dist/mcp s3://${{inputs.s3_bucket}}$ORIGIN_PATH --recursive
+        run: aws s3 cp dist/${{imputs.stack_name}} s3://${{inputs.s3_bucket}}$ORIGIN_PATH --recursive
       - name: Update cloudfront
         run: |
           aws cloudfront get-distribution-config --id ${{inputs.distribution_id}} --output json > cloudfront_dist.json
