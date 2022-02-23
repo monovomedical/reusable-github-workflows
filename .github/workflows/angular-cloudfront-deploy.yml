@@ -6,7 +6,7 @@ on:
       aws_region:
         required: true
         type: string
-      aws_page:
+      aws_pager:
         required: false
         type: string
       environment_name:
@@ -60,8 +60,8 @@ jobs:
       - name: Upload dist
         uses: actions/upload-artifact@v2
         with:
-          name: dist
-          path: dist.tar.gz
+          name: ${{inputs.stack_name}}_dist
+          path: ${{inputs.stack_name}}_dist.tar.gz
           retention-days: 1
   deploy:
     needs: build
@@ -69,10 +69,16 @@ jobs:
     container:
       image: sleavely/node-awscli:12.x
     steps:
+      - name: Set up AWS credentials
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{secrets.aws_access_key_id}}" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=${{secrets.aws_secret_access_key}}" >> $GITHUB_ENV
+          echo "AWS_REGION=${{inputs.aws_region}}" >> $GITHUB_ENV
+          echo "AWS_PAGER=${{inputs.aws_pager}}" >> $GITHUB_ENV
       - name: Download dist
         uses: actions/download-artifact@v2
         with:
-          name: dist
+          name: ${{inputs.stack_name}}_dist
       - name: Download build timestamp
         uses: actions/download-artifact@v2
         with:
@@ -80,20 +86,20 @@ jobs:
       - name: Save build timestamp to env variable
         run: echo "TIME=$(cat build_timestamp.txt)" >> $GITHUB_ENV
       - name: Extract dist
-        run: tar -xvf dist.tar.gz
+        run: tar -xvf ${{inputs.stack_name}}_dist.tar.gz
       - name: Set Up Origin Path
         run: |
           echo "ORIGIN_PATH=/${{inputs.stack_name}}/${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
           echo "APP_VERSION=${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
       - name: Push to S3
-        run: aws s3 cp dist/${{inputs.stack_name}} s3://${{inputs.s3_bucket}}$ORIGIN_PATH --recursive
+        run: aws s3 cp dist/${{inputs.stack_name}} s3://${{inputs.s3_bucket}}${{env.ORIGIN_PATH}} --recursive
       - name: Update cloudfront
         run: |
-          aws cloudfront get-distribution-config --id ${{inputs.distribution_id}} --output json > cloudfront_dist.json
+          aws cloudfront get-distribution-config --id ${{secrets.distribution_id}} --output json > cloudfront_dist.json
           export ETAG=$(jq '.ETag' cloudfront_dist.json | tr -d '"')
           jq '.DistributionConfig' cloudfront_dist.json |
             jq '.Origins.Items[0].OriginPath = $ENV.ORIGIN_PATH' > modified_distribution_config.json
-          aws cloudfront update-distribution --id ${{inputs.distribution_id}} --if-match $ETAG --distribution-config file://modified_distribution_config.json
-          aws cloudfront create-invalidation --distribution-id ${{inputs.distribution_id}} --paths "/*"
-      - name: Build number deployed
+          aws cloudfront update-distribution --id ${{secrets.distribution_id}} --if-match $ETAG --distribution-config file://modified_distribution_config.json
+          aws cloudfront create-invalidation --distribution-id ${{secrets.distribution_id}} --paths "/*"
+      - name: Print app version deployed
         run: echo "${APP_VERSION} was deployed"
