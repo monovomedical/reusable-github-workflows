@@ -1,0 +1,61 @@
+name: Deploy Angular App to Cloudfront
+
+on:
+  workflow_call:
+    inputs:
+      aws_region:
+        required: true
+        type: string
+      aws_pager:
+        required: false
+        type: string
+      s3_bucket:
+        required: true
+        type: string
+      stack_name:
+        required: true
+        type: string
+      app_version:
+        required: true
+        type: string
+    secrets:
+      aws_access_key_id:
+        required: true
+      aws_secret_access_key:
+        required: true
+      distribution_id:
+        required: true
+jobs:
+  deploy:
+    runs-on: ubuntu-20.04
+    container:
+      image: sleavely/node-awscli:12.x
+    steps:
+      - name: Set up AWS credentials
+        run: |
+            echo "AWS_ACCESS_KEY_ID=${{secrets.aws_access_key_id}}" >> $GITHUB_ENV
+            echo "AWS_SECRET_ACCESS_KEY=${{secrets.aws_secret_access_key}}" >> $GITHUB_ENV
+            echo "AWS_REGION=${{inputs.aws_region}}" >> $GITHUB_ENV
+            echo "AWS_PAGER=${{inputs.aws_pager}}" >> $GITHUB_ENV
+      - name: Query S3 for app version
+        run: |
+          aws s3 ls s3://${{inputs.s3_bucket}}/${{inputs.stack_name}}/${APP_VERSION}/ ||
+          {
+            echo "No results when checking S3. App version ${APP_VERSION} may not exist."
+            exit 1 # This should stop the pipeline from executing the next step
+          }
+        env:
+          APP_VERSION: ${{inputs.app_version}}
+      - name: Set Up Origin Path
+        run: |
+          echo "ORIGIN_PATH=/${{inputs.stack_name}}/${APP_VERSION}" >> $GITHUB_ENV
+        env:
+          APP_VERSION: ${{inputs.app_version}}
+      - name: Update cloudfront
+        run: |
+          aws cloudfront get-distribution-config --id ${{secrets.distribution_id}} --output json > cloudfront_dist.json
+          export ETAG=$(jq '.ETag' cloudfront_dist.json | tr -d '"')
+          jq '.DistributionConfig' cloudfront_dist.json |
+            jq '.Origins.Items[0].OriginPath = $ENV.ORIGIN_PATH' > modified_distribution_config.json
+          aws cloudfront update-distribution --id ${{secrets.distribution_id}} --if-match $ETAG --distribution-config file://modified_distribution_config.json
+          aws cloudfront create-invalidation --distribution-id ${{secrets.distribution_id}} --paths "/*"
