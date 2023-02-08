@@ -54,7 +54,7 @@ jobs:
       - name: Add timestamp to environment file
         run: sed -i "s/PLACE_TIMESTAMP_HERE/$TIME/g" ./src/environments/environment.${{inputs.environment_name}}.ts
       - name: Build Project
-        run: node --max-old-space-size=2048 $(which npm) run build -- -c ${{inputs.build_config_name}}
+        run: node --max-old-space-size=2048 $(which npm) run build -- -c ${{inputs.build_config_name}} --output-hashing=all
       - name: Compress dist
         run: tar -cvzf ${{inputs.stack_name}}_dist.tar.gz dist/${{inputs.stack_name}}
       - name: Upload dist
@@ -92,7 +92,9 @@ jobs:
           echo "ORIGIN_PATH=/${{inputs.stack_name}}/${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
           echo "APP_VERSION=${TIME}_${GITHUB_REF_NAME}" >> $GITHUB_ENV
       - name: Push to S3
-        run: aws s3 cp dist/${{inputs.stack_name}} s3://${{inputs.s3_bucket}}${{env.ORIGIN_PATH}} --recursive
+        run: |
+          aws s3 cp dist/${{inputs.stack_name}} s3://${{inputs.s3_bucket}}${{env.ORIGIN_PATH}} --recursive
+          aws s3 cp dist/${{input.stack_name}}/index.html s3://${{inputs.s3_bucket}}${{env.ORIGIN_PATH}}/index.html --metadata-directive REPLACE --cache-control max-age=0 --content-type "text/html"
       - name: Update cloudfront
         run: |
           aws cloudfront get-distribution-config --id ${{secrets.distribution_id}} --output json > cloudfront_dist.json
