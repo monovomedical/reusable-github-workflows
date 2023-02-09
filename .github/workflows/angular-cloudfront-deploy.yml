@@ -94,7 +94,7 @@ jobs:
       - name: Push to S3
         run: |
           aws s3 cp dist/${{inputs.stack_name}} s3://${{inputs.s3_bucket}}${{env.ORIGIN_PATH}} --recursive
-          aws s3 cp dist/${{input.stack_name}}/index.html s3://${{inputs.s3_bucket}}${{env.ORIGIN_PATH}}/index.html --metadata-directive REPLACE --cache-control max-age=0 --content-type "text/html"
+          aws s3 cp dist/${{inputs.stack_name}}/index.html s3://${{inputs.s3_bucket}}${{env.ORIGIN_PATH}}/index.html --metadata-directive REPLACE --cache-control max-age=0 --content-type "text/html"
       - name: Update cloudfront
         run: |
           aws cloudfront get-distribution-config --id ${{secrets.distribution_id}} --output json > cloudfront_dist.json
