@@ -31,12 +31,12 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     container:
-      image: node:12.22-alpine3.12
+      image: node:20.15.1-alpine3.19
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Install Project
         run: npm ci
       - name: Save build timestamp to env variable
@@ -44,7 +44,7 @@ jobs:
       - name: Save build timestamp to txt file
         run: echo $TIME > build_timestamp.txt
       - name: Upload build timestamp for deploy step
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: build_timestamp
           path: build_timestamp.txt
@@ -58,16 +58,16 @@ jobs:
       - name: Compress dist
         run: tar -cvzf ${{inputs.stack_name}}_dist.tar.gz dist/${{inputs.stack_name}}
       - name: Upload dist
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: ${{inputs.stack_name}}_dist
           path: ${{inputs.stack_name}}_dist.tar.gz
           retention-days: 1
   deploy:
     needs: build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     container:
-      image: sleavely/node-awscli:12.x
+      image: sleavely/node-awscli:20.x
     steps:
       - name: Set up AWS credentials
         run: |
@@ -76,11 +76,11 @@ jobs:
           echo "AWS_REGION=${{inputs.aws_region}}" >> $GITHUB_ENV
           echo "AWS_PAGER=${{inputs.aws_pager}}" >> $GITHUB_ENV
       - name: Download dist
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: ${{inputs.stack_name}}_dist
       - name: Download build timestamp
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: build_timestamp
       - name: Save build timestamp to env variable
